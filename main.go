@@ -63,7 +63,7 @@ func GetLogLevel(level int) (log.Level) {
 	}
 }
 
-func CleanTable(r helpers.Clean, config *helpers.Config, stats map[string]helpers.TableStats) {
+func CleanTable(r helpers.Clean, config *helpers.Config, stats map[string]helpers.TableStats, ch chan<- bool) {
 	connection, err := helpers.OpenConnection(
 		config.Username,
 		helpers.GetEnvVar(config.Password),
@@ -79,6 +79,7 @@ func CleanTable(r helpers.Clean, config *helpers.Config, stats map[string]helper
 	r.Prepare(connection, config)
 	r.Run(config)
 	stats[config.TableName] = r.GetTableStats()
+	ch <- true
 }
 
 func ProcessResults(stats map[string]helpers.TableStats) string {
@@ -117,6 +118,7 @@ func main() {
 	log.SetLevel(GetLogLevel(LogLevel))
 
 	stats := map[string]helpers.TableStats{}
+	ch := make(chan bool)
 
 	for _,configPath := range helpers.GetYAMLFiles(ConfigDir) {
 		config := helpers.Config{}
@@ -126,8 +128,9 @@ func main() {
 		)
 
 		t := getHandler(config.Type)
-		CleanTable(t.(helpers.Clean), &config, stats)
+		go CleanTable(t.(helpers.Clean), &config, stats, ch)
 	}
+	<-ch
 
 	Notify(ProcessResults(stats))
 }
